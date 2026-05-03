@@ -29,6 +29,7 @@ const title = computed(() => {
 });
 
 const model = ref<Api.OrgTag.Item>(createDefaultModel());
+const isEdit = computed(() => props.operateType === 'edit');
 
 function createDefaultModel(): Api.OrgTag.Item {
   return {
@@ -44,7 +45,7 @@ const rules = ref<FormRules>({
     defaultRequiredRule,
     {
       validator(_, value) {
-        return !value.startsWith('PRIVATE_');
+        return isEdit.value || !String(value ?? '').startsWith('PRIVATE_');
       },
       message: '标签Id不能以PRIVATE_开头',
       trigger: 'blur'
@@ -70,7 +71,7 @@ async function handleSubmit() {
   loading.value = true;
   let res: FlatResponseData;
   if (props.operateType === 'edit')
-    res = await request({ url: `/admin/org-tags/${model.value.tagId}`, method: 'PUT', data: model.value });
+    res = await request({ url: `/admin/org-tags/${props.rowData.tagId}`, method: 'PUT', data: model.value });
   else res = await request({ url: '/admin/org-tags', method: 'POST', data: model.value });
   if (!res.error) {
     window.$message?.success('操作成功');
@@ -100,7 +101,7 @@ watch(visible, () => {
   >
     <NForm ref="formRef" :model="model" :rules="rules" label-placement="left" :label-width="100" mt-10>
       <NFormItem label="标签Id" path="tagId">
-        <NInput v-model:value="model.tagId" placeholder="请输入标签Id" maxlength="60" />
+        <NInput v-model:value="model.tagId" placeholder="请输入标签Id" maxlength="60" :disabled="isEdit" />
       </NFormItem>
       <NFormItem label="标签名称" path="name">
         <NInput v-model:value="model.name" placeholder="请输入标签名称" maxlength="60" />

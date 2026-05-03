@@ -25,7 +25,7 @@ const imageUrl = ref('');
 
 // 获取文件扩展名
 const fileExt = computed(() => {
-  return getFileExt(props.fileName).toLowerCase();
+  return (getFileExt(props.fileName) || '').toLowerCase();
 });
 
 // 判断文件类型

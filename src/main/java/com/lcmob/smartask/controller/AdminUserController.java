@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -94,6 +95,65 @@ public class AdminUserController {
             monitor.end("获取用户列表异常: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    @PutMapping("/users/{userId}/org-tags")
+    public ResponseEntity<?> assignOrgTags(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId,
+            @RequestBody AssignOrgTagsRequest request) {
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_ASSIGN_ORG_TAGS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                LogUtils.logUserOperation("anonymous", "ADMIN_ASSIGN_ORG_TAGS", "token_validation", "FAILED_INVALID_TOKEN");
+                monitor.end("assign org tags failed: invalid token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+
+            if (request == null || request.getOrgTags() == null || request.getOrgTags().isEmpty()) {
+                monitor.end("assign org tags failed: empty orgTags");
+                throw new CustomException("orgTags must not be empty", HttpStatus.BAD_REQUEST);
+            }
+
+            userProfileService.assignOrgTagsToUser(userId, request.getOrgTags(), username);
+
+            LogUtils.logUserOperation(username, "ADMIN_ASSIGN_ORG_TAGS", "user_org_tags", "SUCCESS");
+            LogUtils.logBusiness("ADMIN_ASSIGN_ORG_TAGS", username,
+                    "Assigned org tags to userId=%d, orgTags=%s", userId, request.getOrgTags());
+            monitor.end("assign org tags success");
+
+            return ResponseEntity.ok(Map.of(
+                    "code", 200,
+                    "message", "Assign organization tags success",
+                    "data", Map.of()));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("ADMIN_ASSIGN_ORG_TAGS", username,
+                    "assign org tags failed: %s", e, e.getMessage());
+            monitor.end("assign org tags failed: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_ASSIGN_ORG_TAGS", username,
+                    "assign org tags error: %s", e, e.getMessage());
+            monitor.end("assign org tags error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    public static class AssignOrgTagsRequest {
+        private List<String> orgTags;
+
+        public List<String> getOrgTags() {
+            return orgTags;
+        }
+
+        public void setOrgTags(List<String> orgTags) {
+            this.orgTags = orgTags;
         }
     }
 }

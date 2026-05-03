@@ -42,7 +42,7 @@ export function useTable<A extends NaiveUI.TableApiFn>(config: NaiveUI.NaiveTabl
       if (Array.isArray(res.data)) {
         const records = res.data.map(item => {
           // 转换 orgTags 格式
-          const orgTags = item.orgTags ? item.orgTags.split(',').map(tag => ({
+          const orgTags = item.orgTags ? item.orgTags.split(',').map((tag: string) => ({
             tagId: tag,
             name: tag
           })) : [];

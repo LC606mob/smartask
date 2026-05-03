@@ -17,8 +17,10 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -67,5 +69,19 @@ class AdminUserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.content").isArray());
+    }
+
+    @Test
+    void assignOrgTagsUpdatesUserTags() throws Exception {
+        when(jwtUtils.extractUsernameFromToken("token")).thenReturn("admin");
+
+        mockMvc.perform(put("/api/v1/admin/users/2/org-tags")
+                        .header("Authorization", "Bearer token")
+                        .contentType("application/json")
+                        .content("{\"orgTags\":[\"default\",\"admin\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(userProfileService).assignOrgTagsToUser(2L, List.of("default", "admin"), "admin");
     }
 }

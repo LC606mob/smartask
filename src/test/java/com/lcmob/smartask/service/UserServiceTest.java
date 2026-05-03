@@ -2,6 +2,7 @@ package com.lcmob.smartask.service;
 
 import com.lcmob.smartask.exception.CustomException;
 import com.lcmob.smartask.model.User;
+import com.lcmob.smartask.repository.OrganizationTagRepository;
 import com.lcmob.smartask.repository.UserRepository;
 import com.lcmob.smartask.utils.PasswordUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,117 +13,92 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.HttpStatus;
 
+import java.util.List;
 import java.util.Optional;
 
-import static org.hamcrest.Matchers.any;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-/**
- * UserService 的测试类
- */
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 class UserServiceTest {
-    // 模拟 UserRepository 实例
     @Mock
     private UserRepository userRepository;
 
-    // 注入模拟的 UserService 实例
-    @InjectMocks
-    private UserService userService;
+    @Mock
+    private OrganizationTagRepository organizationTagRepository;
 
-    /**
-     * 在每个测试方法执行前初始化模拟对象
-     */
+    @Mock
+    private OrgTagCacheService orgTagCacheService;
+
+    @InjectMocks
+    private AuthService authService;
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
     }
 
-    /**
-     * 测试用户注册成功的情况
-     */
     @Test
     void testRegisterUser_Success() {
-        // 假设用户名 "testuser" 在数据库中不存在
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
+        when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(true);
+        when(organizationTagRepository.existsByTagId("PRIVATE_testuser")).thenReturn(false);
 
-        // 调用 userService 的 registerUser 方法进行用户注册
-        userService.registerUser("testuser", "password123");
+        authService.registerUser("testuser", "password123");
 
-        // 创建 ArgumentCaptor 来捕获 save 方法的参数
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, times(2)).save(userCaptor.capture());
 
-        // 验证 userRepository.save 被调用了一次，并捕获参数
-        verify(userRepository, times(1)).save(userCaptor.capture());
-
-        // 获取捕获的 User 对象并进行断言
-        User savedUser = userCaptor.getValue();
+        List<User> savedUsers = userCaptor.getAllValues();
+        User savedUser = savedUsers.get(savedUsers.size() - 1);
         assertNotNull(savedUser);
         assertEquals("testuser", savedUser.getUsername());
+        assertEquals(User.Role.USER, savedUser.getRole());
+        assertEquals("PRIVATE_testuser", savedUser.getOrgTags());
+        assertEquals("PRIVATE_testuser", savedUser.getPrimaryOrg());
+        verify(orgTagCacheService).cacheUserOrgTags("testuser", List.of("PRIVATE_testuser"));
+        verify(orgTagCacheService).cacheUserPrimaryOrg("testuser", "PRIVATE_testuser");
     }
 
-    /**
-     * 测试用户注册时用户名已存在的情况
-     */
     @Test
     void testRegisterUser_UsernameExists() {
-        // 假设用户名 "testuser" 在数据库中已存在
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(new User()));
 
-        // 断言在注册已存在的用户名时抛出 CustomException 异常
-        CustomException exception = assertThrows(CustomException.class, () -> userService.registerUser("testuser", "password123"));
+        CustomException exception = assertThrows(
+                CustomException.class,
+                () -> authService.registerUser("testuser", "password123")
+        );
+
         assertEquals("Username already exists", exception.getMessage());
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
     }
 
-    /**
-     * 测试用户认证成功的情况
-     */
-   @Test
-void testAuthenticateUser_Success() {
-    // 使用 PasswordUtil 生成加密密码
-    String rawPassword = "password123";
-    String encodedPassword = PasswordUtil.encode(rawPassword);
+    @Test
+    void testAuthenticateUser_Success() {
+        String rawPassword = "password123";
+        User user = new User();
+        user.setUsername("testuser");
+        user.setPassword(PasswordUtil.encode(rawPassword));
 
-    // 创建一个带有加密密码的用户对象，并确保设置了用户名
-    User user = new User();
-    user.setUsername("testuser"); // 确保设置了用户名
-    user.setPassword(encodedPassword);
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
 
-    when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
+        String username = authService.authenticateUser("testuser", rawPassword);
 
-    try {
-        // 调用 userService 的 authenticateUser 方法进行用户认证
-        String username = userService.authenticateUser("testuser", rawPassword);
-
-        // 打印返回的用户名（仅用于调试）
-        System.out.println("Returned username: " + username);
-
-        // 断言返回的用户名是否正确
         assertEquals("testuser", username);
-    } catch (CustomException e) {
-        // 捕获并打印异常信息
-        System.out.println("Exception message: " + e.getMessage());
-        throw e;
     }
 
-    // 打印实际的加密密码（仅用于调试）
-    System.out.println("Actual encrypted password: " + user.getPassword());
-}
-
-
-
-
-
-    /**
-     * 测试用户认证失败的情况
-     */
     @Test
     void testAuthenticateUser_InvalidCredentials() {
-        // 假设用户名 "testuser" 在数据库中不存在
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
 
-        // 断言在使用错误密码认证时抛出 CustomException 异常
-        CustomException exception = assertThrows(CustomException.class, () -> userService.authenticateUser("testuser", "wrongpassword"));
+        CustomException exception = assertThrows(
+                CustomException.class,
+                () -> authService.authenticateUser("testuser", "wrongpassword")
+        );
+
         assertEquals("Invalid username or password", exception.getMessage());
         assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
     }

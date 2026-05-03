@@ -3,7 +3,24 @@ defineOptions({ name: 'SystemLogo' });
 </script>
 
 <template>
-  <icon-local-logo />
+  <svg aria-hidden="true" width="1em" height="1em" viewBox="0 0 24 24" fill="none">
+    <path
+      d="M5 6.8C5 4.7 6.7 3 8.8 3h6.4C17.3 3 19 4.7 19 6.8v3.4c0 2.1-1.7 3.8-3.8 3.8h-2.8l-3.3 3.2c-.6.6-1.6.2-1.6-.7v-2.8C6 13.2 5 11.8 5 10.2V6.8Z"
+      stroke="currentColor"
+      stroke-width="1.9"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M8.6 8.2h4.2M8.6 11h2.8"
+      stroke="currentColor"
+      stroke-width="1.9"
+      stroke-linecap="round"
+    />
+    <path
+      d="M17.4 4.8l.4 1 .9.4-.9.4-.4 1-.4-1-.9-.4.9-.4.4-1ZM15.8 16.4l.5 1.1 1.1.5-1.1.5-.5 1.1-.5-1.1-1.1-.5 1.1-.5.5-1.1Z"
+      fill="currentColor"
+    />
+  </svg>
 </template>
 
 <style scoped></style>

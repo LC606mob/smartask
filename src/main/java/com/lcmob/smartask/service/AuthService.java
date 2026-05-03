@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * 认证服务
@@ -50,6 +51,7 @@ public class AuthService {
     private static final String PRIVATE_TAG_PREFIX = "PRIVATE_";
     private static final String PRIVATE_ORG_NAME_SUFFIX = "的私人空间";
     private static final String PRIVATE_ORG_DESCRIPTION = "用户的私人组织标签，仅用户本人可访问";
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_-]{2,31}$");
 
     @Autowired
     private UserRepository userRepository;
@@ -65,6 +67,12 @@ public class AuthService {
      */
     @Transactional
     public void registerUser(String username, String password) {
+        if (username == null || !USERNAME_PATTERN.matcher(username).matches()) {
+            throw new CustomException(
+                "Username must be 3-32 characters, start with a letter, and contain only letters, digits, hyphens, or underscores",
+                HttpStatus.BAD_REQUEST);
+        }
+
         if (userRepository.findByUsername(username).isPresent()) {
             throw new CustomException("Username already exists", HttpStatus.BAD_REQUEST);
         }
@@ -181,7 +189,7 @@ public class AuthService {
                     systemAdmin.setPassword(PasswordUtil.encode(randomPassword));
                     systemAdmin.setRole(User.Role.ADMIN);
 
-                    logger.info("System admin created with password: {}", randomPassword);
+                    logger.info("System admin created successfully");
                     return userRepository.save(systemAdmin);
                 });
     }

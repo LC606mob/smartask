@@ -2,6 +2,7 @@ package com.lcmob.smartask.config;
 
 import com.lcmob.smartask.model.FileUpload;
 import com.lcmob.smartask.repository.FileUploadRepository;
+import com.lcmob.smartask.service.OrgTagCacheService;
 import com.lcmob.smartask.utils.JwtUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,10 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 组织标签授权过滤器
@@ -54,6 +53,9 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
 
     @Autowired
     private FileUploadRepository fileUploadRepository;
+
+    @Autowired
+    private OrgTagCacheService orgTagCacheService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -151,17 +153,16 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
 
             String resourceOrgTag = resourceInfo.getOrgTag();
 
-            // 如果是公开资源、资源没有组织标签、或属于默认组织，直接放行
+            // 如果是公开资源或资源没有组织标签，直接放行
             if (resourceInfo.isPublic() ||
                     resourceOrgTag == null ||
-                    resourceOrgTag.isEmpty() ||
-                    DEFAULT_ORG_TAG.equals(resourceOrgTag)) {
-                logger.debug("资源是公开的或无组织标签或属于默认组织，放行请求");
+                    resourceOrgTag.isEmpty()) {
+                logger.debug("资源是公开的或无组织标签，放行请求");
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // 从请求头获取token
+            // 从请求头获取token（DEFAULT 组织和后续检查都需要认证）
             String token = extractToken(request);
             if (token == null) {
                 logger.debug("未找到Token，返回401");
@@ -169,7 +170,14 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 获取用户名和角色
+            // DEFAULT 组织资源：认证即可访问（所有注册用户都自动属于 DEFAULT）
+            if (DEFAULT_ORG_TAG.equals(resourceOrgTag)) {
+                logger.debug("资源属于默认组织，用户已认证，放行请求");
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // 获取用户名和角色（token 已在上方提取）
             String username = jwtUtils.extractUsernameFromToken(token);
             String role = jwtUtils.extractRoleFromToken(token);
 
@@ -195,16 +203,16 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 获取用户的组织标签
-            String userOrgTags = jwtUtils.extractOrgTagsFromToken(token);
-            if (userOrgTags == null || userOrgTags.isEmpty()) {
-                logger.debug("用户没有组织标签，拒绝访问");
+            // 使用缓存获取用户的有效组织标签（含父标签继承，实时同步）
+            List<String> effectiveTags = orgTagCacheService.getUserEffectiveOrgTags(username);
+            if (effectiveTags == null || effectiveTags.isEmpty()) {
+                logger.debug("用户没有有效组织标签，拒绝访问");
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
 
-            // 检查用户是否有权限访问该资源
-            if (isUserAuthorized(userOrgTags, resourceOrgTag)) {
+            // 检查用户是否有权限访问该资源（基于有效标签集合）
+            if (effectiveTags.contains(resourceOrgTag)) {
                 logger.debug("用户有访问权限，放行请求");
                 filterChain.doFilter(request, response);
             } else {
@@ -315,18 +323,6 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
         return null;
-    }
-
-    /**
-     * 检查用户是否有权限访问该资源
-     */
-    private boolean isUserAuthorized(String userOrgTags, String resourceOrgTag) {
-        // 将用户的组织标签字符串转换为集合
-        Set<String> userTags = Arrays.stream(userOrgTags.split(","))
-                .collect(Collectors.toSet());
-
-        // 检查用户的组织标签是否包含资源的组织标签
-        return userTags.contains(resourceOrgTag);
     }
 
     /**

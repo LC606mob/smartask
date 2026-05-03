@@ -79,6 +79,14 @@ public class UserProfileService {
             if (!organizationTagRepository.existsByTagId(tagId)) {
                 throw new CustomException("Organization tag " + tagId + " not found", HttpStatus.NOT_FOUND);
             }
+
+            // 防止将其他用户的私有标签分配给目标用户
+            if (tagId.startsWith(PRIVATE_TAG_PREFIX)) {
+                String tagOwner = tagId.substring(PRIVATE_TAG_PREFIX.length());
+                if (!tagOwner.equals(user.getUsername())) {
+                    throw new CustomException("Cannot assign another user's private tag: " + tagId, HttpStatus.FORBIDDEN);
+                }
+            }
         }
 
         Set<String> existingTags = new HashSet<>();
@@ -107,9 +115,10 @@ public class UserProfileService {
 
         userRepository.save(user);
 
+        // 先清除旧缓存，再写入新值，避免读到脏数据
         orgTagCacheService.deleteUserOrgTagsCache(user.getUsername());
-        orgTagCacheService.cacheUserOrgTags(user.getUsername(), new ArrayList<>(finalTags));
         orgTagCacheService.deleteUserEffectiveTagsCache(user.getUsername());
+        orgTagCacheService.cacheUserOrgTags(user.getUsername(), new ArrayList<>(finalTags));
 
         if (user.getPrimaryOrg() != null && !user.getPrimaryOrg().isEmpty()) {
             orgTagCacheService.cacheUserPrimaryOrg(user.getUsername(), user.getPrimaryOrg());

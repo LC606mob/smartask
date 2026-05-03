@@ -3,6 +3,7 @@ package com.lcmob.smartask.service;
 import com.lcmob.smartask.exception.CustomException;
 import com.lcmob.smartask.model.OrganizationTag;
 import com.lcmob.smartask.model.User;
+import com.lcmob.smartask.repository.FileUploadRepository;
 import com.lcmob.smartask.repository.OrganizationTagRepository;
 import com.lcmob.smartask.repository.UserRepository;
 import org.slf4j.Logger;
@@ -52,6 +53,9 @@ public class OrgTagService {
 
     @Autowired
     private OrgTagCacheService orgTagCacheService;
+
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
 
     /**
      * 创建组织标签
@@ -159,30 +163,21 @@ public class OrgTagService {
             throw new CustomException("Cannot delete a tag with child tags", HttpStatus.BAD_REQUEST);
         }
 
-        List<User> users = userRepository.findAll();
-        for (User user : users) {
-            if (user.getOrgTags() != null && !user.getOrgTags().isEmpty()) {
-                Set<String> userTags = new HashSet<>(Arrays.asList(user.getOrgTags().split(",")));
-                if (userTags.contains(tagId)) {
-                    throw new CustomException("Cannot delete a tag that is assigned to users", HttpStatus.CONFLICT);
-                }
-
-                if (tagId.equals(user.getPrimaryOrg())) {
-                    throw new CustomException("Cannot delete a tag that is used as primary organization", HttpStatus.CONFLICT);
-                }
-            }
+        // 检查是否有用户关联了该标签（使用 SQL 查询替代全表扫描）
+        List<User> usersWithTag = userRepository.findByOrgTagContaining(tagId);
+        if (!usersWithTag.isEmpty()) {
+            throw new CustomException("Cannot delete a tag that is assigned to users", HttpStatus.CONFLICT);
         }
 
-        try {
-            long fileCount = 0;
-            if (fileCount > 0) {
-                throw new CustomException("Cannot delete a tag that is associated with documents", HttpStatus.CONFLICT);
-            }
-        } catch (CustomException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.error("Error checking file usage of tag: {}", tagId, e);
-            throw new CustomException("Failed to check if tag is used by documents", HttpStatus.INTERNAL_SERVER_ERROR);
+        List<User> usersWithPrimaryOrg = userRepository.findByPrimaryOrg(tagId);
+        if (!usersWithPrimaryOrg.isEmpty()) {
+            throw new CustomException("Cannot delete a tag that is used as primary organization", HttpStatus.CONFLICT);
+        }
+
+        // 检查是否有文档关联了该标签
+        long fileCount = fileUploadRepository.countByOrgTag(tagId);
+        if (fileCount > 0) {
+            throw new CustomException("Cannot delete a tag that is associated with " + fileCount + " documents", HttpStatus.CONFLICT);
         }
 
         organizationTagRepository.delete(tag);

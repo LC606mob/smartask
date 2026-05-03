@@ -55,6 +55,7 @@ public class AdminUserInitializer implements CommandLineRunner {
 
         if (existingAdmin.isPresent()) {
             logger.info("管理员账号 '{}' 已存在，跳过创建步骤", adminUsername);
+            warnIfDefaultPassword();
             return;
         }
 
@@ -72,6 +73,17 @@ public class AdminUserInitializer implements CommandLineRunner {
         } catch (Exception e) {
             logger.error("创建管理员账号失败: {}", e.getMessage(), e);
             throw new RuntimeException("无法创建管理员账号", e);
+        }
+
+        warnIfDefaultPassword();
+    }
+
+    private void warnIfDefaultPassword() {
+        if ("admin123".equals(adminPassword)) {
+            logger.warn("============================================================");
+            logger.warn("  安全警告: 管理员正在使用默认密码 'admin123'");
+            logger.warn("  请在 application.yml 中设置 admin.password 为强密码");
+            logger.warn("============================================================");
         }
     }
 } 

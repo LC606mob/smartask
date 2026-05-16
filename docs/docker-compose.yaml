@@ -30,7 +30,7 @@ services:
     container_name: smartask-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "16379:6379"
     command: redis-server --bind 0.0.0.0 --port 6379 --requirepass 123456 --appendonly yes
     volumes:
       - smartask-redis-data:/data
